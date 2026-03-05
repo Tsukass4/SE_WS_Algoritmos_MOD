@@ -1,227 +1,189 @@
 import pygame
 import heapq
-import random
+import time
+
+pygame.init()
+
+WIDTH, HEIGHT = 1200, 800
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Rutas Turísticas Guadalajara - Prim")
+
+FONT_NOMBRE = pygame.font.SysFont("arial", 22, bold=True)
+FONT_DIST = pygame.font.SysFont("arial", 22, bold=True)
+
+COLOR_FONDO = (20,60,20)
+
+COLOR_ARISTA = (160,160,160)
+COLOR_ACTUAL = (255,255,0)
+COLOR_ACEPTADA = (0,220,255)
+
+COLOR_NOMBRE = (255,255,200)
+COLOR_DIST = (240,240,240)
+
+START_NODE = "Teatro"
 
 # -----------------------------
-# CONFIGURACIONES GENERALES
+# POSICIONES
 # -----------------------------
-TAM_CELDA = 30
-COLOR_FONDO = (30, 30, 30)
 
-COLOR_INICIO = (0, 255, 0)
-COLOR_OBSTACULO = (0, 0, 0)
-COLOR_MST = (0, 255, 255)
-COLOR_FRONTERA = (255, 255, 0)
-COLOR_VISITADO = (100, 100, 255)
-COLOR_VACIO = (200, 200, 200)
-COLOR_ARISTA_ACTUAL = (255, 0, 0)
-COLOR_TEXTO = (255, 255, 255)
+lugares = {
 
-PESO_MIN = 1
-PESO_MAX = 20
+"Teatro":(600,380),
+"Hospicio":(700,450),
 
-# -----------------------------
-# AUXILIAR
-# -----------------------------
-def edge_key(u, v):
-    return (u, v) if u <= v else (v, u)
+"Zoologico":(980,160),
 
-# -----------------------------
-# DIBUJAR ARISTA
-# -----------------------------
-def dibujar_arista(ventana, u, v, peso, color, fuente):
-    (r1, c1) = u
-    (r2, c2) = v
+"Colomos":(380,160),
+"Andares":(260,90),
 
-    x1 = c1 * TAM_CELDA + TAM_CELDA // 2
-    y1 = r1 * TAM_CELDA + TAM_CELDA // 2
-    x2 = c2 * TAM_CELDA + TAM_CELDA // 2
-    y2 = r2 * TAM_CELDA + TAM_CELDA // 2
+"Metropolitano":(160,380),
 
-    pygame.draw.line(ventana, color, (x1, y1), (x2, y2), 4)
+"Estadio":(820,250),
 
-    xm = (x1 + x2) // 2
-    ym = (y1 + y2) // 2
-    texto = fuente.render(str(peso), True, (255, 255, 255))
-    ventana.blit(texto, (xm - 8, ym - 8))
+"PlazaSol":(380,650),
+
+"Tlaquepaque":(900,650)
+
+}
 
 # -----------------------------
-# DIBUJAR TABLERO COMPLETO
+# CONEXIONES
 # -----------------------------
-def dibujar_tablero(ventana, tablero, inicio, en_mst,
-                    frontera, visitados, mst_edges,
-                    arista_actual, edge_weights,
-                    total_cost, fuente):
 
-    ventana.fill(COLOR_FONDO)
+edges=[
 
-    filas = len(tablero)
-    columnas = len(tablero[0])
+("Teatro","Hospicio",0.7),
 
-    # Dibujar celdas
-    for i in range(filas):
-        for j in range(columnas):
-            x = j * TAM_CELDA
-            y = i * TAM_CELDA
+("Teatro","PlazaSol",7),
+("Teatro","Metropolitano",8),
 
-            if (i, j) == inicio:
-                color = COLOR_INICIO
-            elif tablero[i][j] == float("inf"):
-                color = COLOR_OBSTACULO
-            elif (i, j) in en_mst:
-                color = COLOR_MST
-            elif (i, j) in frontera:
-                color = COLOR_FRONTERA
-            elif (i, j) in visitados:
-                color = COLOR_VISITADO
-            else:
-                color = COLOR_VACIO
+("Hospicio","Zoologico",7),
+("Hospicio","Estadio",4),
 
-            pygame.draw.rect(ventana, color, (x, y, TAM_CELDA, TAM_CELDA))
-            pygame.draw.rect(ventana, (50, 50, 50), (x, y, TAM_CELDA, TAM_CELDA), 1)
+("Colomos","Andares",1.5),
+("Colomos","Metropolitano",4),
+("Colomos","Estadio",3),
 
-    # Dibujar aristas del MST
-    for (u, v) in mst_edges:
-        peso = edge_weights[edge_key(u, v)]
-        dibujar_arista(ventana, u, v, peso, COLOR_MST, fuente)
+("Andares","Metropolitano",6),
 
-    # Dibujar arista actual
-    if arista_actual:
-        u, v = arista_actual
-        peso = edge_weights[edge_key(u, v)]
-        dibujar_arista(ventana, u, v, peso, COLOR_ARISTA_ACTUAL, fuente)
+("Estadio","Zoologico",4),
 
-    # Mostrar texto
-    texto_costo = fuente.render(f"Costo total: {total_cost}", True, COLOR_TEXTO)
-    ventana.blit(texto_costo, (10, 10))
+("Metropolitano","PlazaSol",3),
+
+("PlazaSol","Tlaquepaque",7)
+
+]
+
+# -----------------------------
+# CONSTRUIR GRAFO
+# -----------------------------
+
+graph = {}
+
+for u,v,w in edges:
+
+    graph.setdefault(u,[]).append((v,w))
+    graph.setdefault(v,[]).append((u,w))
+
+# -----------------------------
+# DIBUJO
+# -----------------------------
+
+def draw(current_edge, mst_edges):
+
+    screen.fill(COLOR_FONDO)
+
+    for u,v,w in edges:
+
+        x1,y1=lugares[u]
+        x2,y2=lugares[v]
+
+        color=COLOR_ARISTA
+
+        if current_edge and (u,v,w)==current_edge:
+            color=COLOR_ACTUAL
+
+        if (u,v,w) in mst_edges or (v,u,w) in mst_edges:
+            color=COLOR_ACEPTADA
+
+        pygame.draw.line(screen,color,(x1,y1),(x2,y2),4)
+
+        mx=(x1+x2)//2
+        my=(y1+y2)//2
+
+        text=FONT_DIST.render(str(w)+" km",True,COLOR_DIST)
+
+        rect=text.get_rect(center=(mx,my))
+        pygame.draw.rect(screen,(40,40,40),rect.inflate(6,4))
+
+        screen.blit(text,rect)
+
+    for name,(x,y) in lugares.items():
+
+        pygame.draw.circle(screen,(240,240,240),(x,y),10)
+
+        if name==START_NODE:
+
+            pygame.draw.circle(screen,(255,60,60),(x,y),22,3)
+
+            label=FONT_NOMBRE.render(name+" (Inicio)",True,(255,220,120))
+
+        else:
+            label=FONT_NOMBRE.render(name,True,COLOR_NOMBRE)
+
+        screen.blit(label,(x+12,y-12))
 
     pygame.display.update()
-    pygame.time.delay(100)
 
 # -----------------------------
-# PRIM VISUAL
+# ALGORITMO PRIM
 # -----------------------------
-def prim_pygame(ventana, tablero, inicio, edge_weights, fuente):
 
-    filas = len(tablero)
-    columnas = len(tablero[0])
+def prim():
 
-    en_mst = set()
-    frontera = set()
-    visitados = set()
-    parent = {}
-    min_key = {}
-    mst_edges = []
-    total_cost = 0
+    visited=set([START_NODE])
 
-    for i in range(filas):
-        for j in range(columnas):
-            if tablero[i][j] != float("inf"):
-                min_key[(i, j)] = float("inf")
+    pq=[]
 
-    min_key[inicio] = 0
-    pq = [(0, inicio)]
+    for v,w in graph[START_NODE]:
+        heapq.heappush(pq,(w,START_NODE,v))
+
+    mst_edges=[]
 
     while pq:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                exit()
 
-        key, nodo = heapq.heappop(pq)
+        w,u,v=heapq.heappop(pq)
 
-        if nodo in en_mst:
+        draw((u,v,w),mst_edges)
+        time.sleep(1)
+
+        if v in visited:
             continue
 
-        en_mst.add(nodo)
-        visitados.add(nodo)
+        visited.add(v)
 
-        arista_actual = None
+        mst_edges.append((u,v,w))
 
-        if nodo in parent:
-            mst_edges.append((nodo, parent[nodo]))
-            total_cost += edge_weights[edge_key(nodo, parent[nodo])]
-            arista_actual = (nodo, parent[nodo])
+        draw(None,mst_edges)
+        time.sleep(0.7)
 
-        f, c = nodo
-        for df, dc in [(0,1),(0,-1),(1,0),(-1,0)]:
-            nf, nc = f + df, c + dc
-            vecino = (nf, nc)
+        for to,weight in graph[v]:
 
-            if (
-                0 <= nf < filas and 0 <= nc < columnas and
-                tablero[nf][nc] != float("inf") and
-                vecino not in en_mst
-            ):
-                w = edge_weights[edge_key(nodo, vecino)]
-                if w < min_key[vecino]:
-                    min_key[vecino] = w
-                    parent[vecino] = nodo
-                    frontera.add(vecino)
-                    heapq.heappush(pq, (w, vecino))
-
-        dibujar_tablero(ventana, tablero, inicio,
-                        en_mst, frontera, visitados,
-                        mst_edges, arista_actual,
-                        edge_weights, total_cost,
-                        fuente)
-
-    print("Prim finalizado.")
-    print("Costo total:", total_cost)
-
-# -----------------------------
-# GENERAR PESOS
-# -----------------------------
-def generar_edge_weights(tablero):
-    filas = len(tablero)
-    columnas = len(tablero[0])
-    edge_weights = {}
-
-    for r in range(filas):
-        for c in range(columnas):
-            if tablero[r][c] == float("inf"):
-                continue
-
-            u = (r, c)
-
-            if c + 1 < columnas and tablero[r][c+1] != float("inf"):
-                v = (r, c+1)
-                edge_weights[edge_key(u, v)] = random.randint(PESO_MIN, PESO_MAX)
-
-            if r + 1 < filas and tablero[r+1][c] != float("inf"):
-                v = (r+1, c)
-                edge_weights[edge_key(u, v)] = random.randint(PESO_MIN, PESO_MAX)
-
-    return edge_weights
+            if to not in visited:
+                heapq.heappush(pq,(weight,v,to))
 
 # -----------------------------
 # MAIN
 # -----------------------------
-def main():
-    pygame.init()
 
-    ALTO = 10
-    ANCHO = 20
-    INICIO = (5, 12)
+running=True
 
-    tablero = [[0 for _ in range(ANCHO)] for _ in range(ALTO)]
+prim()
 
-    ventana = pygame.display.set_mode((ANCHO * TAM_CELDA, ALTO * TAM_CELDA))
-    pygame.display.set_caption("Prim Visual - Red Eléctrica")
+while running:
 
-    fuente = pygame.font.SysFont("Arial", 16)
+    for event in pygame.event.get():
+        if event.type==pygame.QUIT:
+            running=False
 
-    edge_weights = generar_edge_weights(tablero)
-
-    prim_pygame(ventana, tablero, INICIO, edge_weights, fuente)
-
-    running = True
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-
-    pygame.quit()
-
-if __name__ == "__main__":
-    main()
+pygame.quit()
